@@ -2,7 +2,6 @@ package com.example.myapp
 
 import android.content.ContentValues
 import android.content.Context
-import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -27,17 +26,10 @@ class CameraManager(
     private val lifecycleOwner: LifecycleOwner,
     private val previewView: PreviewView
 ) {
-
-    /** CameraX のカメラ管理オブジェクト */
     private var cameraProvider: ProcessCameraProvider? = null
-
-    /** 写真撮影に使用するオブジェクト */
     private var imageCapture: ImageCapture? = null
 
-    /** 現在選択しているカメラ */
-    private var cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
-    /** カメラの起動処理が進行中かどうか */
+    private var isFrontCamera = false
     private var isStarting = false
 
     /**
@@ -48,13 +40,12 @@ class CameraManager(
 
         isStarting = true
 
-        val cameraProviderFuture =
-            ProcessCameraProvider.getInstance(context)
+        val providerFuture = ProcessCameraProvider.getInstance(context)
 
-        cameraProviderFuture.addListener(
+        providerFuture.addListener(
             {
                 try {
-                    cameraProvider = cameraProviderFuture.get()
+                    cameraProvider = providerFuture.get()
                     bindCameraUseCases()
                 } catch (exception: Exception) {
                     showMessage("カメラを起動できませんでした")
@@ -73,10 +64,23 @@ class CameraManager(
         val provider = cameraProvider ?: return
 
         try {
-            // 以前のカメラ接続を解除する
+            val selector = if (isFrontCamera) {
+                CameraSelector.DEFAULT_FRONT_CAMERA
+            } else {
+                CameraSelector.DEFAULT_BACK_CAMERA
+            }
+
+            // 選択したカメラが利用できるか確認する
+            if (!provider.hasCamera(selector)) {
+                showMessage("選択したカメラは利用できません")
+                isFrontCamera = !isFrontCamera
+                return
+            }
+
+            // 以前の接続を解除する
             provider.unbindAll()
 
-            // プレビューを作成する
+            // カメラ映像のプレビューを作成する
             val preview = Preview.Builder()
                 .build()
                 .also {
@@ -84,21 +88,23 @@ class CameraManager(
                 }
 
             // 写真撮影機能を作成する
-            imageCapture = ImageCapture.Builder()
+            val capture = ImageCapture.Builder()
                 .setCaptureMode(
                     ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY
                 )
                 .build()
 
-            // カメラをライフサイクルに接続する
+            imageCapture = capture
+
+            // プレビューと撮影機能をカメラに接続する
             provider.bindToLifecycle(
                 lifecycleOwner,
-                cameraSelector,
+                selector,
                 preview,
-                imageCapture
+                capture
             )
-
         } catch (exception: Exception) {
+            imageCapture = null
             showMessage("カメラの設定に失敗しました")
         }
     }
@@ -107,19 +113,19 @@ class CameraManager(
      * 前面カメラと背面カメラを切り替える
      */
     fun switchCamera() {
-        cameraSelector =
-            if (cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
-                CameraSelector.DEFAULT_FRONT_CAMERA
-            } else {
-                CameraSelector.DEFAULT_BACK_CAMERA
-            }
+        val provider = cameraProvider
 
-        // 選択したカメラでプレビューを再接続する
+        if (provider == null) {
+            showMessage("カメラを準備しています")
+            return
+        }
+
+        isFrontCamera = !isFrontCamera
         bindCameraUseCases()
     }
 
     /**
-     * 写真を撮影して保存する
+     * 写真を撮影して DCIM/Camera に保存する
      */
     fun takePhoto() {
         val capture = imageCapture
@@ -129,7 +135,6 @@ class CameraManager(
             return
         }
 
-        // 保存する写真のファイル名を作成する
         val timeStamp = SimpleDateFormat(
             "yyyyMMdd_HHmmss",
             Locale.JAPAN
@@ -137,12 +142,10 @@ class CameraManager(
 
         val fileName = "IMG_$timeStamp.jpg"
 
-        // 写真の保存先情報を設定する
         val contentValues = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
 
-            // Android 10 以降は DCIM/Camera に保存する
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(
                     MediaStore.Images.Media.RELATIVE_PATH,
@@ -151,7 +154,6 @@ class CameraManager(
             }
         }
 
-        // 保存先を指定する
         val outputOptions =
             ImageCapture.OutputFileOptions.Builder(
                 context.contentResolver,
@@ -159,7 +161,6 @@ class CameraManager(
                 contentValues
             ).build()
 
-        // 撮影して保存する
         capture.takePicture(
             outputOptions,
             ContextCompat.getMainExecutor(context),
@@ -181,21 +182,18 @@ class CameraManager(
     }
 
     /**
-     * メッセージを画面に表示する
+     * カメラの接続を解除する
      */
+    fun stopCamera() {
+        cameraProvider?.unbindAll()
+        imageCapture = null
+    }
+
     private fun showMessage(message: String) {
         Toast.makeText(
             context,
             message,
             Toast.LENGTH_SHORT
         ).show()
-    }
-
-    /**
-     * カメラの接続を解除する
-     */
-    fun stopCamera() {
-        cameraProvider?.unbindAll()
-        imageCapture = null
     }
 }
