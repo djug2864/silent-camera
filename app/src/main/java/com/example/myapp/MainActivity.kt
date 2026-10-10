@@ -7,33 +7,27 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.camera.core.CameraSelector
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
-import com.google.android.material.button.MaterialButton
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var cameraPreview: PreviewView
-    private lateinit var statusText: android.widget.TextView
+    private lateinit var statusText: TextView
 
-    private var cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+    private var cameraManager: CameraManager? = null
 
-    /*
-     * カメラの使用許可を求める。
-     * 許可されたらカメラの起動処理へ進む。
-     */
     private val requestCameraPermission =
         registerForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { isGranted ->
-
             if (isGranted) {
-                startCameraPreview()
+                startCamera()
             } else {
                 showCameraPermissionDeniedDialog()
             }
@@ -41,59 +35,58 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         setContentView(R.layout.activity_main)
 
         cameraPreview = findViewById(R.id.cameraPreview)
         statusText = findViewById(R.id.statusText)
 
+        cameraManager = CameraManager(
+            context = this,
+            lifecycleOwner = this,
+            previewView = cameraPreview
+        )
+
         setupButtons()
         checkCameraPermission()
     }
 
-    /*
-     * 画面上の各ボタンを設定する。
+    /**
+     * 各ボタンの動作を設定する
      */
     private fun setupButtons() {
-
-        // 設定ボタン
-        findViewById<android.view.View>(R.id.settingsButton)
+        findViewById<View>(R.id.settingsButton)
             .setOnClickListener {
                 openSettingsScreen()
             }
 
-        // 前面・背面カメラ切り替えボタン
-        findViewById<android.view.View>(R.id.switchCameraButton)
+        findViewById<View>(R.id.switchCameraButton)
             .setOnClickListener {
-                switchCamera()
+                cameraManager?.switchCamera()
             }
 
-        // 写真アプリを開くボタン
-        findViewById<android.view.View>(R.id.galleryButton)
+        findViewById<View>(R.id.galleryButton)
             .setOnClickListener {
-                openPhotoApp()
+                openPhotoPicker()
             }
 
-        // 撮影ボタン
-        findViewById<android.view.View>(R.id.shutterButton)
+        findViewById<View>(R.id.shutterButton)
             .setOnClickListener {
-                takePhoto()
+                cameraManager?.takePhoto()
             }
     }
 
-    /*
-     * カメラの使用許可を確認する。
+    /**
+     * カメラの使用許可を確認する
      */
     private fun checkCameraPermission() {
-
-        val permissionGranted =
+        val isGranted =
             ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.CAMERA
             ) == PackageManager.PERMISSION_GRANTED
 
-        if (permissionGranted) {
-            startCameraPreview()
+        if (isGranted) {
+            startCamera()
         } else {
             requestCameraPermission.launch(
                 Manifest.permission.CAMERA
@@ -101,80 +94,33 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /*
-     * カメラプレビューを開始する。
-     *
-     * 実際のプレビュー起動処理は、
-     * CameraXの接続処理を追加する手順で実装する。
+    /**
+     * カメラを起動する
      */
-    private fun startCameraPreview() {
-
+    private fun startCamera() {
         showStatus("カメラを準備しています…")
+        cameraManager?.startCamera()
 
-        /*
-         * 現段階では、CameraXのプレビュー接続処理は
-         * まだ追加されていない。
-         *
-         * 後の手順でカメラを起動する処理を完成させる。
-         */
-        cameraPreview.post {
-            hideStatus()
-        }
+        // プレビュー領域の準備後に案内表示を消す
+        cameraPreview.postDelayed(
+            {
+                hideStatus()
+            },
+            1500
+        )
     }
 
-    /*
-     * 前面カメラと背面カメラを切り替える。
+    /**
+     * 写真選択画面を開く
      */
-    private fun switchCamera() {
-
-        cameraSelector =
-            if (cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
-                CameraSelector.DEFAULT_FRONT_CAMERA
-            } else {
-                CameraSelector.DEFAULT_BACK_CAMERA
+    private fun openPhotoPicker() {
+        try {
+            val intent = Intent(
+                Intent.ACTION_GET_CONTENT
+            ).apply {
+                type = "image/*"
             }
 
-        /*
-         * カメラの切り替えを実際に反映する処理は、
-         * CameraXの接続処理を追加する手順で実装する。
-         */
-        Toast.makeText(
-            this,
-            if (cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
-                "前面カメラを選択しました"
-            } else {
-                "背面カメラを選択しました"
-            },
-            Toast.LENGTH_SHORT
-        ).show()
-    }
-
-    /*
-     * 写真を撮影する。
-     */
-    private fun takePhoto() {
-
-        /*
-         * 写真の撮影・保存処理は、
-         * CameraXの撮影機能を追加する手順で実装する。
-         */
-        Toast.makeText(
-            this,
-            "撮影機能は次の手順で設定します",
-            Toast.LENGTH_SHORT
-        ).show()
-    }
-
-    /*
-     * Googleフォトなどの写真アプリを開く。
-     */
-    private fun openPhotoApp() {
-
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            type = "image/*"
-        }
-
-        try {
             startActivity(
                 Intent.createChooser(
                     intent,
@@ -184,39 +130,38 @@ class MainActivity : AppCompatActivity() {
         } catch (exception: Exception) {
             Toast.makeText(
                 this,
-                "写真アプリを開けませんでした",
+                "写真を開けませんでした",
                 Toast.LENGTH_SHORT
             ).show()
         }
     }
 
-    /*
-     * 設定画面を開く。
+    /**
+     * 設定ボタン
      *
-     * 設定画面は後の手順で追加する。
+     * 専用の設定画面は、後の手順で追加する
      */
     private fun openSettingsScreen() {
-
         Toast.makeText(
             this,
-            "設定画面は後の手順で追加します",
+            "設定画面はまだ作成していません",
             Toast.LENGTH_SHORT
         ).show()
     }
 
-    /*
-     * カメラの使用が許可されなかった場合の案内。
+    /**
+     * カメラの使用を拒否された場合の案内
      */
     private fun showCameraPermissionDeniedDialog() {
-
         AlertDialog.Builder(this)
             .setTitle("カメラの使用許可が必要です")
             .setMessage(
                 "このアプリで写真を撮影するには、" +
-                    "カメラの使用を許可してください。"
+                    "カメラの使用を許可してください。\n\n" +
+                    "許可する場合は、アプリの設定から" +
+                    "カメラへのアクセスを有効にしてください。"
             )
             .setPositiveButton("設定を開く") { _, _ ->
-
                 val intent = Intent(
                     Settings.ACTION_APPLICATION_DETAILS_SETTINGS
                 ).apply {
@@ -226,25 +171,37 @@ class MainActivity : AppCompatActivity() {
                         null
                     )
                 }
-
                 startActivity(intent)
             }
             .setNegativeButton("閉じる", null)
             .show()
     }
 
-    /*
-     * 画面に状態メッセージを表示する。
-     */
     private fun showStatus(message: String) {
         statusText.text = message
         statusText.visibility = View.VISIBLE
     }
 
-    /*
-     * 状態メッセージを非表示にする。
-     */
     private fun hideStatus() {
         statusText.visibility = View.GONE
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        // 設定画面から戻ったとき、許可状態を再確認する
+        if (::cameraPreview.isInitialized &&
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            cameraManager?.startCamera()
+        }
+    }
+
+    override fun onStop() {
+        cameraManager?.stopCamera()
+        super.onStop()
     }
 }
