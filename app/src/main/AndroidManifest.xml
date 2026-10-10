@@ -1,27 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!--
-        android:allowBackup="true" enables automatic data backup to Google Drive.
-        If your app handles sensitive data, consider restricting the backup scope
-        via android:fullBackupContent or disabling it with android:allowBackup="false".
-        See: https://developer.android.com/guide/topics/data/autobackup
-    -->
+    <!-- カメラ機能の使用許可 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- カメラが搭載されている端末で利用する -->
+    <!-- required="false" により、カメラのない端末へのインストールも妨げない -->
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
+
     <application
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyApp">
 
+        <!-- アプリのメイン画面 -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
+
+            <!-- ホーム画面からアプリを起動できるようにする -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
         </activity>
 
     </application>
