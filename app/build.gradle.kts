@@ -19,12 +19,6 @@ android {
             "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    signingConfigs {
-        create("release") {
-            // リリース署名の設定は、公開前に行います。
-        }
-    }
-
     buildTypes {
         release {
             isMinifyEnabled = false
